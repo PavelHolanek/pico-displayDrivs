@@ -80,7 +80,6 @@ void GFX_drawPixel(int16_t x, int16_t y, uint16_t color)
 
 void GFX_drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color)
 {
-
 	int16_t steep = abs(y1 - y0) > abs(x1 - x0);
 	if (steep)
 	{
@@ -530,7 +529,7 @@ void dma_memcpy(void *dest, void *src, size_t num)
 }
 
 void GFX_scrollUp(int n)
-{	
+{
 	if (gfxFramebuffer)
 	{
 		if(n > _height)
@@ -538,9 +537,10 @@ void GFX_scrollUp(int n)
 		uint16_t *src = gfxFramebuffer + (_width * n);
 		size_t linesCopy  = _width* (_height - n);
 		size_t linesFill = _width * n;
-	
+
 		dma_memcpy(gfxFramebuffer, src, 2* linesCopy);
 		dma_memset(gfxFramebuffer+linesCopy, 0, 2* linesFill);
 
+    GFX_fillRect(0, _height - n, _width, n, clearColour);
 	}
 }
