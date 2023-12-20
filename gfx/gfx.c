@@ -1,3 +1,6 @@
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
 #include "pico/stdlib.h"
 #include "malloc.h"
 #include "stdarg.h"
@@ -7,6 +10,10 @@
 #include "gfxfont.h"
 
 #include "hardware/dma.h"
+
+// Declare methods from the display drivers
+extern void LCD_WritePixel(int x, int y, uint16_t col);
+extern void LCD_WriteBitmap(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t *bitmap);
 
 #ifndef swap
 #define swap(a, b)     \
