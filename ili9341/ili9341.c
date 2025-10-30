@@ -233,11 +233,11 @@ void LCD_setAddrWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 	ya = __builtin_bswap32(ya);
 
 	ILI9341_WriteCommand(ILI9341_CASET);
-	ILI9341_WriteData(&xa, sizeof(xa));
+	ILI9341_WriteData((uint8_t*)&xa, sizeof(xa));
 
 	// row address set
 	ILI9341_WriteCommand(ILI9341_PASET);
-	ILI9341_WriteData(&ya, sizeof(ya));
+	ILI9341_WriteData((uint8_t*)&ya, sizeof(ya));
 
 	// write to RAM
 	ILI9341_WriteCommand(ILI9341_RAMWR);

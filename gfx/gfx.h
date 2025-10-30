@@ -7,10 +7,17 @@
 // convert 8 bit r, g, b values to 16 bit colour (rgb565 format) 
 #define GFX_RGB565(R, G, B) ((uint16_t)(((R) & 0b11111000) << 8) | (((G) & 0b11111100) << 3) | ((B) >> 3))
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void GFX_createFramebuf();
 void GFX_destroyFramebuf();
 
 void GFX_drawPixel(int16_t x, int16_t y, uint16_t color);
+
+void addExtraCharacter(wchar_t c);
+char getCharForWideChar(wchar_t wc);
 
 void GFX_drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color, uint16_t bg, uint8_t size_x, uint8_t size_y);
 void GFX_write(uint8_t c);
@@ -40,5 +47,9 @@ void GFX_scrollUp(int n);
 
 uint GFX_getWidth();
 uint GFX_getHeight();
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

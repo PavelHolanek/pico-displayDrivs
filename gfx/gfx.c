@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 #include "pico/stdlib.h"
 #include "malloc.h"
 #include "stdarg.h"
@@ -38,14 +39,46 @@ extern uint16_t _height; ///< Display height as modified by current rotation
 
 static int16_t cursor_y = 0;
 int16_t cursor_x = 0;
-uint8_t textsize_x = 1;
-uint8_t textsize_y = 1;
+uint8_t textsize_x = 2;
+uint8_t textsize_y = 2;
 uint16_t textcolor = GFX_WHITE;
 uint16_t textbgcolor = GFX_BLACK;
 uint16_t clearColour = GFX_BLACK;
 uint8_t wrap = 1;
 
 GFXfont *gfxFont = NULL;
+
+wchar_t wideCharacters[128] = {};
+uint8_t extraCharacters = 0;
+
+char getCharForWideChar(wchar_t wc)
+{
+	for (uint8_t i = 0; i < 128; i++)
+	{
+		if (wc == wideCharacters[i])
+		{
+			return i + 128;
+		}
+	}
+	return '?';
+}
+
+typedef enum
+{
+    DIACRITIC_NONE = 0,
+    DIACRITIC_ACUTE,  		// ´
+    DIACRITIC_CARON,  		// ˇ
+    DIACRITIC_DOT,    		// .
+} DIACRITIC;
+
+void addExtraCharacter(wchar_t c)
+{
+	if(extraCharacters < 128)
+	{
+		wideCharacters[extraCharacters] = c;
+		extraCharacters++;
+	} 
+}
 
 uint GFX_getWidth()
 {
@@ -161,6 +194,170 @@ void GFX_drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
 	GFX_drawFastVLine(x + w - 1, y, h, color);
 }
 
+unsigned char solveDiacritic(wchar_t wc, DIACRITIC* d) {
+    // Map characters with diacritics to their base character and diacritic type
+	int i = wc;
+    switch (i)
+	{
+        case L'Á':
+            *d = DIACRITIC_ACUTE;
+            return 'A';
+        case L'Ó':
+            *d = DIACRITIC_ACUTE;
+            return 'O';
+        case L'Í':
+            *d = DIACRITIC_ACUTE;
+            return 'I';
+        case L'É':
+            *d = DIACRITIC_ACUTE;
+            return 'E';
+		case L'Ú':
+            *d = DIACRITIC_ACUTE;
+            return 'U';
+        case L'Ů':
+            *d = DIACRITIC_DOT;
+            return 'U';
+        case  L'Ě':
+            *d = DIACRITIC_CARON;
+            return 'E';
+        case  L'Ř':
+            *d = DIACRITIC_CARON;
+            return 'R';
+        case  L'Š':
+            *d = DIACRITIC_CARON;
+            return 'S';
+        case  L'Č':
+            *d = DIACRITIC_CARON;
+            return 'C';
+        case  L'Ž':
+            *d = DIACRITIC_CARON;
+            return 'Z';
+        case  L'Ň':
+            *d = DIACRITIC_CARON;
+            return 'N';
+        case  L'Ď':
+            *d = DIACRITIC_CARON;
+            return 'D';
+        case  L'Ť':
+            *d = DIACRITIC_CARON;
+            return 'T';
+		case  L'Ý':
+            *d = DIACRITIC_ACUTE;
+            return 'Y';
+		case L'á':
+        	*d = DIACRITIC_ACUTE;
+        	return 'a';
+		case L'ó':
+			*d = DIACRITIC_ACUTE;
+			return 'o';
+		case L'í':
+			*d = DIACRITIC_ACUTE;
+			return 'i';
+		case L'é':
+			*d = DIACRITIC_ACUTE;
+			return 'e';
+		case L'ú':
+			*d = DIACRITIC_ACUTE;
+			return 'u';
+		case L'ů':
+			*d = DIACRITIC_DOT;
+			return 'u';
+		case L'ě':
+			*d = DIACRITIC_CARON;
+			return 'e';
+		case L'ř':
+			*d = DIACRITIC_CARON;
+			return 'r';
+		case L'š':
+			*d = DIACRITIC_CARON;
+			return 's';
+		case L'č':
+			*d = DIACRITIC_CARON;
+			return 'c';
+		case L'ž':
+			*d = DIACRITIC_CARON;
+			return 'z';
+		case L'ň':
+			*d = DIACRITIC_CARON;
+			return 'n';
+		case L'ď':
+			*d = DIACRITIC_CARON;
+			return 'd';
+		case L'ť':
+			*d = DIACRITIC_CARON;
+			return 't';
+		case L'ý':
+			*d = DIACRITIC_ACUTE;
+			return 'y';
+        default:
+            *d = DIACRITIC_NONE; 
+           return (char)wc;
+    }
+}
+
+void drawDiacritic(int16_t x, int16_t y, unsigned char c, DIACRITIC diacritic, uint16_t color,
+				  uint16_t bg, uint8_t size_x, uint8_t size_y)
+{
+
+	if (size_x != 2 && size_y != 2)
+	{
+		return;
+	}
+
+	uint8_t offset = isupper(c) ? 0 : 3;
+
+	if (diacritic == DIACRITIC_DOT)
+	{
+		GFX_drawPixel(x + 4, y - 1 + offset, color);
+		GFX_drawPixel(x + 5, y - 1 + offset, color);
+		GFX_drawPixel(x + 4, y - 4 + offset, color);
+		GFX_drawPixel(x + 5, y - 4 + offset, color);
+		GFX_drawPixel(x + 3, y - 2 + offset, color);
+		GFX_drawPixel(x + 3, y - 3 + offset, color);
+		GFX_drawPixel(x + 6, y - 2 + offset, color);
+		GFX_drawPixel(x + 6, y - 3 + offset, color);
+	}
+
+	else if (diacritic == DIACRITIC_CARON)
+	{
+		if ('t' == c)
+		{
+			GFX_drawPixel(x + 7, y - 1 + offset, color);	
+			GFX_drawPixel(x + 7, y - 2 + offset, color);
+			GFX_drawPixel(x + 8, y - 2 + offset, color);
+			GFX_drawPixel(x + 8, y - 3 + offset, color);
+		}
+		else if('d' == c)
+		{
+			// Currently not implemented as caron would be outside of char bounds and interfere with symbol next to it
+		}
+		else
+		{
+			GFX_drawPixel(x + 4, y - 2 + offset, color);
+			GFX_drawPixel(x + 5, y - 2 + offset, color);
+			GFX_drawPixel(x + 3, y - 3 + offset, color);
+			GFX_drawPixel(x + 4, y - 3 + offset, color);
+			GFX_drawPixel(x + 5, y - 3 + offset, color);
+			GFX_drawPixel(x + 6, y - 3 + offset, color);
+			GFX_drawPixel(x + 3, y - 4 + offset, color);
+			GFX_drawPixel(x + 2, y - 4 + offset, color);
+			GFX_drawPixel(x + 7, y - 4 + offset, color);
+			GFX_drawPixel(x + 6, y - 4 + offset, color);
+		}
+	}
+
+	else if (diacritic == DIACRITIC_ACUTE)
+	{
+		GFX_drawPixel(x + 4, y - 3 + offset, bg);
+		GFX_drawPixel(x + 4, y - 2 + offset, color);
+		GFX_drawPixel(x + 5, y - 2 + offset, color);
+		GFX_drawPixel(x + 5, y - 3 + offset, color);
+		GFX_drawPixel(x + 6, y - 3 + offset, color);
+		GFX_drawPixel(x + 7, y - 4 + offset, color);
+		GFX_drawPixel(x + 6, y - 4 + offset, color);
+	}
+}
+
 void GFX_drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color,
 				  uint16_t bg, uint8_t size_x, uint8_t size_y)
 {
@@ -172,6 +369,13 @@ void GFX_drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color,
 			((y + 8 * size_y - 1) < 0))	  // Clip top
 			return;
 
+		DIACRITIC diacritic = DIACRITIC_NONE;
+		if( c >= 128)
+		{
+			wchar_t wc = wideCharacters[(uint8_t)c - 128];
+			c = solveDiacritic(wc, &diacritic);
+		}
+		
 		if (c >= 176)
 			c++; // Handle 'classic' charset behavior
 
@@ -199,6 +403,8 @@ void GFX_drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color,
 				}
 			}
 		}
+		drawDiacritic(x, y, c, diacritic, color, bg, size_x, size_y);
+
 		if (bg != color)
 		{ // If opaque, draw vertical line for last column
 			if (size_x == 1 && size_y == 1)
