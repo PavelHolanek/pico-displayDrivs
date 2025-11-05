@@ -39,8 +39,6 @@ extern uint16_t _height; ///< Display height as modified by current rotation
 
 static int16_t cursor_y = 0;
 int16_t cursor_x = 0;
-uint8_t textsize_x = 2;
-uint8_t textsize_y = 2;
 uint16_t textcolor = GFX_WHITE;
 uint16_t textbgcolor = GFX_BLACK;
 uint16_t clearColour = GFX_BLACK;
@@ -186,6 +184,27 @@ void GFX_fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
 	}
 }
 
+void fillCircleHelper(int16_t x0, int16_t y0, int16_t r, uint8_t corners, int16_t delta, uint16_t color);
+void GFX_fillRoundedRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r, uint16_t color)
+{
+	if (w <= 0 || h <= 0) return;
+
+	if (r <= 0) {
+		GFX_fillRect(x, y, w, h, color);
+		return;
+	}
+
+	if (r > w / 2) r = w / 2;
+	if (r > h / 2) r = h / 2;
+
+	// Fill the central rectangle (between rounded corners)
+	GFX_fillRect(x + r, y, w - 2 * r, h, color);
+
+	// Fill the rounded corners using helper (extends vertical spans by delta)
+	fillCircleHelper(x + w - r - 1, y + r, r, 1, h - 2 * r - 1, color); // Right corners
+	fillCircleHelper(x + r,           y + r, r, 2, h - 2 * r - 1, color); // Left corners
+}
+
 void GFX_drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
 {
 	GFX_drawFastHLine(x, y, w, color);
@@ -298,63 +317,68 @@ unsigned char solveDiacritic(wchar_t wc, DIACRITIC* d) {
 void drawDiacritic(int16_t x, int16_t y, unsigned char c, DIACRITIC diacritic, uint16_t color,
 				  uint16_t bg, uint8_t size_x, uint8_t size_y)
 {
-
-	if (size_x != 2 && size_y != 2)
+	// Support sizes that are even multiples of 2 (2*n). For other sizes, skip.
+	if ((size_x % 2) != 0 || (size_y % 2) != 0)
 	{
 		return;
 	}
 
-	uint8_t offset = isupper(c) ? 0 : 3;
+	// Scale relative to the original size==2 pattern
+	uint8_t kx = size_x / 2;
+	uint8_t ky = size_y / 2;
+
+	int o = (isupper(c) ? 0 : 3) * ky;
 
 	if (diacritic == DIACRITIC_DOT)
 	{
-		GFX_drawPixel(x + 4, y - 1 + offset, color);
-		GFX_drawPixel(x + 5, y - 1 + offset, color);
-		GFX_drawPixel(x + 4, y - 4 + offset, color);
-		GFX_drawPixel(x + 5, y - 4 + offset, color);
-		GFX_drawPixel(x + 3, y - 2 + offset, color);
-		GFX_drawPixel(x + 3, y - 3 + offset, color);
-		GFX_drawPixel(x + 6, y - 2 + offset, color);
-		GFX_drawPixel(x + 6, y - 3 + offset, color);
+		// Original pixels replicated as rectangles scaled by kx x ky
+		GFX_fillRect(x + 4 * kx, y + (-1) * ky + o, kx, ky, color);
+		GFX_fillRect(x + 5 * kx, y + (-1) * ky + o, kx, ky, color);
+		GFX_fillRect(x + 4 * kx, y + (-4) * ky + o, kx, ky, color);
+		GFX_fillRect(x + 5 * kx, y + (-4) * ky + o, kx, ky, color);
+		GFX_fillRect(x + 3 * kx, y + (-2) * ky + o, kx, ky, color);
+		GFX_fillRect(x + 3 * kx, y + (-3) * ky + o, kx, ky, color);
+		GFX_fillRect(x + 6 * kx, y + (-2) * ky + o, kx, ky, color);
+		GFX_fillRect(x + 6 * kx, y + (-3) * ky + o, kx, ky, color);
 	}
-
 	else if (diacritic == DIACRITIC_CARON)
 	{
 		if ('t' == c)
 		{
-			GFX_drawPixel(x + 7, y - 1 + offset, color);	
-			GFX_drawPixel(x + 7, y - 2 + offset, color);
-			GFX_drawPixel(x + 8, y - 2 + offset, color);
-			GFX_drawPixel(x + 8, y - 3 + offset, color);
+			GFX_fillRect(x + 7 * kx, y + (-1) * ky + o, kx, ky, color);
+			GFX_fillRect(x + 7 * kx, y + (-2) * ky + o, kx, ky, color);
+			GFX_fillRect(x + 8 * kx, y + (-2) * ky + o, kx, ky, color);
+			GFX_fillRect(x + 8 * kx, y + (-3) * ky + o, kx, ky, color);
 		}
-		else if('d' == c)
+		else if ('d' == c)
 		{
-			// Currently not implemented as caron would be outside of char bounds and interfere with symbol next to it
+			// Intentionally not implemented: would exceed char bounds and clash with next glyph
 		}
 		else
 		{
-			GFX_drawPixel(x + 4, y - 2 + offset, color);
-			GFX_drawPixel(x + 5, y - 2 + offset, color);
-			GFX_drawPixel(x + 3, y - 3 + offset, color);
-			GFX_drawPixel(x + 4, y - 3 + offset, color);
-			GFX_drawPixel(x + 5, y - 3 + offset, color);
-			GFX_drawPixel(x + 6, y - 3 + offset, color);
-			GFX_drawPixel(x + 3, y - 4 + offset, color);
-			GFX_drawPixel(x + 2, y - 4 + offset, color);
-			GFX_drawPixel(x + 7, y - 4 + offset, color);
-			GFX_drawPixel(x + 6, y - 4 + offset, color);
+			GFX_fillRect(x + 4 * kx, y + (-2) * ky + o, kx, ky, color);
+			GFX_fillRect(x + 5 * kx, y + (-2) * ky + o, kx, ky, color);
+			GFX_fillRect(x + 3 * kx, y + (-3) * ky + o, kx, ky, color);
+			GFX_fillRect(x + 4 * kx, y + (-3) * ky + o, kx, ky, color);
+			GFX_fillRect(x + 5 * kx, y + (-3) * ky + o, kx, ky, color);
+			GFX_fillRect(x + 6 * kx, y + (-3) * ky + o, kx, ky, color);
+			GFX_fillRect(x + 3 * kx, y + (-4) * ky + o, kx, ky, color);
+			GFX_fillRect(x + 2 * kx, y + (-4) * ky + o, kx, ky, color);
+			GFX_fillRect(x + 7 * kx, y + (-4) * ky + o, kx, ky, color);
+			GFX_fillRect(x + 6 * kx, y + (-4) * ky + o, kx, ky, color);
 		}
 	}
-
 	else if (diacritic == DIACRITIC_ACUTE)
 	{
-		GFX_drawPixel(x + 4, y - 3 + offset, bg);
-		GFX_drawPixel(x + 4, y - 2 + offset, color);
-		GFX_drawPixel(x + 5, y - 2 + offset, color);
-		GFX_drawPixel(x + 5, y - 3 + offset, color);
-		GFX_drawPixel(x + 6, y - 3 + offset, color);
-		GFX_drawPixel(x + 7, y - 4 + offset, color);
-		GFX_drawPixel(x + 6, y - 4 + offset, color);
+		// Background clear to refine shape, scaled
+		GFX_fillRect(x + 4 * kx, y + (-3) * ky + o, kx, ky, bg);
+
+		GFX_fillRect(x + 4 * kx, y + (-2) * ky + o, kx, ky, color);
+		GFX_fillRect(x + 5 * kx, y + (-2) * ky + o, kx, ky, color);
+		GFX_fillRect(x + 5 * kx, y + (-3) * ky + o, kx, ky, color);
+		GFX_fillRect(x + 6 * kx, y + (-3) * ky + o, kx, ky, color);
+		GFX_fillRect(x + 7 * kx, y + (-4) * ky + o, kx, ky, color);
+		GFX_fillRect(x + 6 * kx, y + (-4) * ky + o, kx, ky, color);
 	}
 }
 
@@ -461,8 +485,10 @@ void GFX_drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color,
 	}
 }
 
-void GFX_write(uint8_t c)
+void GFX_write(uint8_t c, uint8_t textsize)
 {
+	uint8_t textsize_y = textsize;
+	uint8_t textsize_x = textsize;
 	if (!gfxFont)
 	{
 		if (c == '\n')
@@ -643,19 +669,19 @@ void GFX_drawCircle(int16_t x0, int16_t y0, int16_t r,
 }
 
 char printBuf[100];
-void printString(char s[])
+void printString(char s[], uint8_t textsize)
 {
 	uint8_t n = strlen(s);
 	for (int i = 0; i < n; i++)
-		GFX_write(s[i]);
+		GFX_write(s[i], textsize);
 }
 
-void GFX_printf(const char *format, ...)
+void GFX_printf(uint8_t textsize, const char *format, ...)
 {
 	va_list args;
 	va_start(args, format);
 	vsprintf(printBuf, format, args);
-	printString(printBuf);
+	printString(printBuf, textsize);
 	va_end(args);
 }
 
