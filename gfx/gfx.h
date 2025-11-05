@@ -20,7 +20,7 @@ void addExtraCharacter(wchar_t c);
 char getCharForWideChar(wchar_t wc);
 
 void GFX_drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color, uint16_t bg, uint8_t size_x, uint8_t size_y);
-void GFX_write(uint8_t c);
+void GFX_write(uint8_t c, uint8_t textsize);
 void GFX_setCursor(int16_t x, int16_t y);
 void GFX_setTextColor(uint16_t color);
 void GFX_setTextBack(uint16_t color);
@@ -32,6 +32,7 @@ void GFX_drawFastHLine(int16_t x, int16_t y, int16_t l, uint16_t color);
 
 void GFX_drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
 void GFX_fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color);
+void GFX_fillRoundedRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r, uint16_t color);
 
 void GFX_fillScreen(uint16_t color);
 void GFX_setClearColor(uint16_t color);
@@ -40,7 +41,7 @@ void GFX_clearScreen();
 void GFX_drawCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color);
 void GFX_fillCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color);
 
-void GFX_printf(const char *format, ...);
+void GFX_printf(uint8_t textsize, const char *format, ...);
 void GFX_flush();
 void GFX_Update();
 void GFX_scrollUp(int n);
