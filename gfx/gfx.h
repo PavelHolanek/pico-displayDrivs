@@ -9,10 +9,12 @@
 extern "C" {
 #endif
 
+#define BUFFER_MAX_SIZE 120000 //120 kB 
 
-
-void GFX_createFramebuf();
+//There can be anything in the memory after initialization, so make it sure that all buffer is used or you risk random pixels
+void GFX_createFramebuf(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
 void GFX_destroyFramebuf();
+void GFX_flush();
 
 void GFX_drawPixel(int16_t x, int16_t y, struct Color color);
 
@@ -42,8 +44,7 @@ void GFX_drawCircle(int16_t x0, int16_t y0, int16_t r, struct Color color);
 void GFX_fillCircle(int16_t x0, int16_t y0, int16_t r, struct Color color);
 
 void GFX_printf(uint8_t textsize, const char *format, ...);
-void GFX_flush();
-void GFX_Update();
+
 
 uint GFX_getWidth();
 uint GFX_getHeight();

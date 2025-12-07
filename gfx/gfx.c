@@ -41,8 +41,12 @@ bool isNotEqual(struct Color c1, struct Color c2)
 static int memcpy_dma_chan;
 static bool gfx_dma_init = false;
 
+uint8_t  frameBufferX = 0;
+uint8_t  frameBufferY = 0;
+uint8_t  frameBufferWidth = 0;
+uint8_t  frameBufferHeight = 0;
+
 uint8_t *gfxFramebuffer = NULL;
-static bool gfxFbUpdated = false;
 
 static int16_t cursor_y = 0;
 int16_t cursor_x = 0;
@@ -114,15 +118,24 @@ void GFX_drawPixel(int16_t x, int16_t y, struct Color color)
 {
 	if (gfxFramebuffer != NULL)
 	{
-		if ((x < 0) || (y < 0) || (x >= _width) || (y >= _height))
-			return;		
-		gfxFramebuffer[(x + y * _width) * 3] = color.r;
-		gfxFramebuffer[(x + y * _width) * 3 + 1] = color.g;
-		gfxFramebuffer[(x + y * _width) * 3 + 2] = color.b;
-		gfxFbUpdated = true;
+		if ((x < frameBufferX) || (y < frameBufferY) || (x >= frameBufferX + frameBufferWidth) || (y >= frameBufferY + frameBufferHeight))
+		{
+			LCD_WritePixel(x, y, color);
+		}
+		else
+		{
+			uint16_t relativeX = x - frameBufferX;
+			uint16_t relativeY = y - frameBufferY;
+			gfxFramebuffer[(relativeX + relativeY * frameBufferWidth) * 3] = color.r;
+			gfxFramebuffer[(relativeX + relativeY * frameBufferWidth) * 3 + 1] = color.g;
+			gfxFramebuffer[(relativeX + relativeY * frameBufferWidth) * 3 + 2] = color.b;
+		}
 	}
 	else
+	{
 		LCD_WritePixel(x, y, color);
+	}
+		
 }
 
 void GFX_drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, struct Color color)
@@ -692,29 +705,33 @@ void GFX_printf(uint8_t textsize, const char *format, ...)
 	va_end(args);
 }
 
-void GFX_createFramebuf() //Currently takes 450kB. More than Pico RAM.
+void GFX_createFramebuf(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 {
-	gfxFramebuffer = malloc(_width * _height * sizeof(uint8_t) * 3);
+	if(w * h * 3 > BUFFER_MAX_SIZE) //e.g. 200p x 200p square
+	{
+		return;
+	}
+	frameBufferX = x;
+	frameBufferY = y;
+	frameBufferWidth = w;
+	frameBufferHeight = h;
+	gfxFramebuffer = malloc(w * h * sizeof(uint8_t) * 3);
 }
 void GFX_destroyFramebuf()
 {
+	frameBufferX = 0;
+	frameBufferY = 0;
+	frameBufferWidth = 0;
+	frameBufferHeight = 0;
 	free(gfxFramebuffer);
 	gfxFramebuffer = NULL;
 }
-
 void GFX_flush()
 {
 	if (gfxFramebuffer != NULL)
 	{
-		LCD_WriteBitmap(0, 0, _width, _height, gfxFramebuffer);
-		gfxFbUpdated = false;
+		LCD_WriteBitmap(frameBufferX, frameBufferY, frameBufferWidth, frameBufferHeight, gfxFramebuffer);
 	}
-}
-
-void GFX_Update()
-{
-	if(gfxFbUpdated)
-		GFX_flush();
 }
 
 void initGfxDmaChan()
