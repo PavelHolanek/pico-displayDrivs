@@ -5,16 +5,26 @@
 #include "pico/stdlib.h"
 #include "malloc.h"
 #include "stdarg.h"
-
 #include "gfx.h"
 #include "font.h"
 #include "gfxfont.h"
-
 #include "hardware/dma.h"
 
 // Declare methods from the display drivers
-extern void LCD_WritePixel(int x, int y, uint16_t col);
-extern void LCD_WriteBitmap(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t *bitmap);
+extern void LCD_WritePixel(int x, int y, struct Color col);
+extern void LCD_WriteBitmap(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint8_t *bitmap);
+extern uint16_t _width;	 ///< Display width as modified by current rotation
+extern uint16_t _height; ///< Display height as modified by current rotation
+
+bool isEqual(struct Color c1, struct Color c2)
+{
+	return c1.b == c2.b && c1.r == c2.r && c1.g == c2.g;
+}
+
+bool isNotEqual(struct Color c1, struct Color c2)
+{
+	return c1.b != c2.b || c1.r != c2.r || c1.g != c2.g;
+}
 
 #ifndef swap
 #define swap(a, b)     \
@@ -25,23 +35,20 @@ extern void LCD_WriteBitmap(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint
 	}
 #endif
 
-#define GFX_BLACK 0x0000
-#define GFX_WHITE 0xFFFF
+#define GFX_BLACK {0x00, 0x00, 0x00}
+#define GFX_WHITE {0xFF, 0xFF, 0xFF}
 
 static int memcpy_dma_chan;
 static bool gfx_dma_init = false;
 
-uint16_t *gfxFramebuffer = NULL;
+uint8_t *gfxFramebuffer = NULL;
 static bool gfxFbUpdated = false;
-
-extern uint16_t _width;	 ///< Display width as modified by current rotation
-extern uint16_t _height; ///< Display height as modified by current rotation
 
 static int16_t cursor_y = 0;
 int16_t cursor_x = 0;
-uint16_t textcolor = GFX_WHITE;
-uint16_t textbgcolor = GFX_BLACK;
-uint16_t clearColour = GFX_BLACK;
+struct Color textcolor = GFX_WHITE;
+struct Color textbgcolor = GFX_BLACK;
+struct Color clearColour = GFX_BLACK;
 uint8_t wrap = 1;
 
 GFXfont *gfxFont = NULL;
@@ -88,7 +95,7 @@ uint GFX_getHeight()
 	return _height;
 }
 
-void GFX_setClearColor(uint16_t color)
+void GFX_setClearColor(struct Color color)
 {
 	clearColour = color;
 }
@@ -98,25 +105,27 @@ void GFX_clearScreen()
 	GFX_fillRect(0, 0, _width, _height, clearColour);
 }
 
-void GFX_fillScreen(uint16_t color)
+void GFX_fillScreen(struct Color color)
 {
 	GFX_fillRect(0, 0, _width, _height, color);
 }
 
-void GFX_drawPixel(int16_t x, int16_t y, uint16_t color)
+void GFX_drawPixel(int16_t x, int16_t y, struct Color color)
 {
 	if (gfxFramebuffer != NULL)
 	{
 		if ((x < 0) || (y < 0) || (x >= _width) || (y >= _height))
-			return;
-		gfxFramebuffer[x + y * _width] = color; //(color >> 8) | (color << 8);
+			return;		
+		gfxFramebuffer[(x + y * _width) * 3] = color.r;
+		gfxFramebuffer[(x + y * _width) * 3 + 1] = color.g;
+		gfxFramebuffer[(x + y * _width) * 3 + 2] = color.b;
 		gfxFbUpdated = true;
 	}
 	else
 		LCD_WritePixel(x, y, color);
 }
 
-void GFX_drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color)
+void GFX_drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, struct Color color)
 {
 	int16_t steep = abs(y1 - y0) > abs(x1 - x0);
 	if (steep)
@@ -166,17 +175,17 @@ void GFX_drawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t color
 	}
 }
 
-void GFX_drawFastVLine(int16_t x, int16_t y, int16_t h, uint16_t color)
+void GFX_drawFastVLine(int16_t x, int16_t y, int16_t h, struct Color color)
 {
 	GFX_drawLine(x, y, x, y + h - 1, color);
 }
 
-void GFX_drawFastHLine(int16_t x, int16_t y, int16_t l, uint16_t color)
+void GFX_drawFastHLine(int16_t x, int16_t y, int16_t l, struct Color color)
 {
 	GFX_drawLine(x, y, x + l - 1, y, color);
 }
 
-void GFX_fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
+void GFX_fillRect(int16_t x, int16_t y, int16_t w, int16_t h, struct Color color)
 {
 	for (int16_t i = x; i < x + w; i++)
 	{
@@ -184,8 +193,54 @@ void GFX_fillRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
 	}
 }
 
-void fillCircleHelper(int16_t x0, int16_t y0, int16_t r, uint8_t corners, int16_t delta, uint16_t color);
-void GFX_fillRoundedRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r, uint16_t color)
+void fillCircleHelper(int16_t x0, int16_t y0, int16_t r,
+					  uint8_t corners, int16_t delta,
+					  struct Color color)
+{
+
+	int16_t f = 1 - r;
+	int16_t ddF_x = 1;
+	int16_t ddF_y = -2 * r;
+	int16_t x = 0;
+	int16_t y = r;
+	int16_t px = x;
+	int16_t py = y;
+
+	delta++; // Avoid some +1's in the loop
+
+	while (x < y)
+	{
+		if (f >= 0)
+		{
+			y--;
+			ddF_y += 2;
+			f += ddF_y;
+		}
+		x++;
+		ddF_x += 2;
+		f += ddF_x;
+		// These checks avoid double-drawing certain lines, important
+		// for the SSD1306 library which has an INVERT drawing mode.
+		if (x < (y + 1))
+		{
+			if (corners & 1)
+				GFX_drawFastVLine(x0 + x, y0 - y, 2 * y + delta, color);
+			if (corners & 2)
+				GFX_drawFastVLine(x0 - x, y0 - y, 2 * y + delta, color);
+		}
+		if (y != py)
+		{
+			if (corners & 1)
+				GFX_drawFastVLine(x0 + py, y0 - px, 2 * px + delta, color);
+			if (corners & 2)
+				GFX_drawFastVLine(x0 - py, y0 - px, 2 * px + delta, color);
+			py = y;
+		}
+		px = x;
+	}
+}
+
+void GFX_fillRoundedRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r, struct Color color)
 {
 	if (w <= 0 || h <= 0) return;
 
@@ -205,7 +260,7 @@ void GFX_fillRoundedRect(int16_t x, int16_t y, int16_t w, int16_t h, int16_t r, 
 	fillCircleHelper(x + r,           y + r, r, 2, h - 2 * r - 1, color); // Left corners
 }
 
-void GFX_drawRect(int16_t x, int16_t y, int16_t w, int16_t h, uint16_t color)
+void GFX_drawRect(int16_t x, int16_t y, int16_t w, int16_t h, struct Color color)
 {
 	GFX_drawFastHLine(x, y, w, color);
 	GFX_drawFastHLine(x, y + h - 1, w, color);
@@ -314,8 +369,8 @@ unsigned char solveDiacritic(wchar_t wc, DIACRITIC* d) {
     }
 }
 
-void drawDiacritic(int16_t x, int16_t y, unsigned char c, DIACRITIC diacritic, uint16_t color,
-				  uint16_t bg, uint8_t size_x, uint8_t size_y)
+void drawDiacritic(int16_t x, int16_t y, unsigned char c, DIACRITIC diacritic, struct Color color,
+				  struct Color bg, uint8_t size_x, uint8_t size_y)
 {
 	// Support sizes that are even multiples of 2 (2*n). For other sizes, skip.
 	if ((size_x % 2) != 0 || (size_y % 2) != 0)
@@ -327,7 +382,6 @@ void drawDiacritic(int16_t x, int16_t y, unsigned char c, DIACRITIC diacritic, u
 	uint8_t kx = size_x / 2;
 	uint8_t ky = size_y / 2;
 
-	// Vertical adjustment for lowercase characters (scaled)
 	int o = (isupper(c) ? 0 : 3) * ky;
 
 	if (diacritic == DIACRITIC_DOT)
@@ -383,8 +437,8 @@ void drawDiacritic(int16_t x, int16_t y, unsigned char c, DIACRITIC diacritic, u
 	}
 }
 
-void GFX_drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color,
-				  uint16_t bg, uint8_t size_x, uint8_t size_y)
+void GFX_drawChar(int16_t x, int16_t y, unsigned char c, struct Color color,
+				  struct Color bg, uint8_t size_x, uint8_t size_y)
 {
 	if (!gfxFont)
 	{
@@ -418,7 +472,7 @@ void GFX_drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color,
 						GFX_fillRect(x + i * size_x, y + j * size_y, size_x,
 									 size_y, color);
 				}
-				else if (bg != color)
+				else if (isNotEqual(bg,color))
 				{
 					if (size_x == 1 && size_y == 1)
 						GFX_drawPixel(x + i, y + j, bg);
@@ -430,7 +484,7 @@ void GFX_drawChar(int16_t x, int16_t y, unsigned char c, uint16_t color,
 		}
 		drawDiacritic(x, y, c, diacritic, color, bg, size_x, size_y);
 
-		if (bg != color)
+		if (isNotEqual(bg,color))
 		{ // If opaque, draw vertical line for last column
 			if (size_x == 1 && size_y == 1)
 				GFX_drawFastVLine(x + 5, y, 8, bg);
@@ -546,12 +600,12 @@ void GFX_setCursor(int16_t x, int16_t y)
 	cursor_y = y;
 }
 
-void GFX_setTextColor(uint16_t color)
+void GFX_setTextColor(struct Color color)
 {
 	textcolor = color;
 }
 
-void GFX_setTextBack(uint16_t color)
+void GFX_setTextBack(struct Color color)
 {
 	textbgcolor = color;
 }
@@ -576,63 +630,15 @@ void GFX_setFont(const GFXfont *f)
 	gfxFont = (GFXfont *)f;
 }
 
-void fillCircleHelper(int16_t x0, int16_t y0, int16_t r,
-					  uint8_t corners, int16_t delta,
-					  uint16_t color)
-{
-
-	int16_t f = 1 - r;
-	int16_t ddF_x = 1;
-	int16_t ddF_y = -2 * r;
-	int16_t x = 0;
-	int16_t y = r;
-	int16_t px = x;
-	int16_t py = y;
-
-	delta++; // Avoid some +1's in the loop
-
-	while (x < y)
-	{
-		if (f >= 0)
-		{
-			y--;
-			ddF_y += 2;
-			f += ddF_y;
-		}
-		x++;
-		ddF_x += 2;
-		f += ddF_x;
-		// These checks avoid double-drawing certain lines, important
-		// for the SSD1306 library which has an INVERT drawing mode.
-		if (x < (y + 1))
-		{
-			if (corners & 1)
-				GFX_drawFastVLine(x0 + x, y0 - y, 2 * y + delta, color);
-			if (corners & 2)
-				GFX_drawFastVLine(x0 - x, y0 - y, 2 * y + delta, color);
-		}
-		if (y != py)
-		{
-			if (corners & 1)
-				GFX_drawFastVLine(x0 + py, y0 - px, 2 * px + delta, color);
-			if (corners & 2)
-				GFX_drawFastVLine(x0 - py, y0 - px, 2 * px + delta, color);
-			py = y;
-		}
-		px = x;
-	}
-}
-
 void GFX_fillCircle(int16_t x0, int16_t y0, int16_t r,
-					uint16_t color)
+					struct Color color)
 {
 
 	GFX_drawFastVLine(x0, y0 - r, 2 * r + 1, color);
 	fillCircleHelper(x0, y0, r, 3, 0, color);
 }
 
-void GFX_drawCircle(int16_t x0, int16_t y0, int16_t r,
-					uint16_t color)
+void GFX_drawCircle(int16_t x0, int16_t y0, int16_t r, struct Color color)
 {
 
 	int16_t f = 1 - r;
@@ -686,9 +692,9 @@ void GFX_printf(uint8_t textsize, const char *format, ...)
 	va_end(args);
 }
 
-void GFX_createFramebuf()
+void GFX_createFramebuf() //Currently takes 450kB. More than Pico RAM.
 {
-	gfxFramebuffer = malloc(_width * _height * sizeof(uint16_t));
+	gfxFramebuffer = malloc(_width * _height * sizeof(uint8_t) * 3);
 }
 void GFX_destroyFramebuf()
 {
@@ -766,21 +772,4 @@ void dma_memcpy(void *dest, void *src, size_t num)
     // thing. In this case the processor has nothing else to do, so we just
     // wait for the DMA to finish.
     dma_channel_wait_for_finish_blocking(memcpy_dma_chan);
-}
-
-void GFX_scrollUp(int n)
-{
-	if (gfxFramebuffer)
-	{
-		if(n > _height)
-			n = _height;
-		uint16_t *src = gfxFramebuffer + (_width * n);
-		size_t linesCopy  = _width* (_height - n);
-		size_t linesFill = _width * n;
-
-		dma_memcpy(gfxFramebuffer, src, 2* linesCopy);
-		dma_memset(gfxFramebuffer+linesCopy, 0, 2* linesFill);
-
-    GFX_fillRect(0, _height - n, _width, n, clearColour);
-	}
 }

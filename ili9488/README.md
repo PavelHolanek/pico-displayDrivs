@@ -1,7 +1,7 @@
-ILI9341 driver, based on [Adafruit ILI9341 Arduino Library](https://github.com/adafruit/Adafruit_ILI9341)
+ILI9488 driver, based on [Adafruit ILI9488 Arduino Library](https://github.com/adafruit/Adafruit_ILI9488)
 
 ## Usage
-Add *ili9341* into CMakeLists.txt, in `target_link_libraries`
+Add *ili9488* into CMakeLists.txt, in `target_link_libraries`
 
 ### Pin mapping
 By default, RST is GPIO16, CS is GPIO17, DC is GPIO20, SCK is GPIO18, TX is GPIO19, using the default SPI peripheral.\
@@ -21,4 +21,4 @@ The SPI peripheral can be selected using `LCD_setSPIperiph`.
 
 
 ### DMA usage
-DMA  usage is disabled by default, but can be enabled by uncommenting `#define USE_DMA 1` in *ili9341.h*
+DMA  usage is disabled by default, but can be enabled by uncommenting `#define USE_DMA 1` in *ili9488.h*
