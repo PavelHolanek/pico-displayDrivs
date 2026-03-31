@@ -41,10 +41,10 @@ bool isNotEqual(struct Color c1, struct Color c2)
 static int memcpy_dma_chan;
 static bool gfx_dma_init = false;
 
-uint8_t  frameBufferX = 0;
-uint8_t  frameBufferY = 0;
-uint8_t  frameBufferWidth = 0;
-uint8_t  frameBufferHeight = 0;
+uint16_t frameBufferX = 0;
+uint16_t frameBufferY = 0;
+uint16_t frameBufferWidth = 0;
+uint16_t frameBufferHeight = 0;
 
 uint8_t *gfxFramebuffer = NULL;
 
@@ -198,11 +198,94 @@ void GFX_drawFastHLine(int16_t x, int16_t y, int16_t l, struct Color color)
 	GFX_drawLine(x, y, x + l - 1, y, color);
 }
 
-void GFX_fillRect(int16_t x, int16_t y, int16_t w, int16_t h, struct Color color)
+static void GFX_fillRectFallback(int16_t x, int16_t y, int16_t w, int16_t h, struct Color color)
 {
 	for (int16_t i = x; i < x + w; i++)
 	{
 		GFX_drawFastVLine(i, y, h, color);
+	}
+}
+
+static void GFX_fillActiveFramebuffer(struct Color color)
+{
+	const uint32_t pixels = (uint32_t)frameBufferWidth * (uint32_t)frameBufferHeight;
+	for (uint32_t i = 0; i < pixels; i++)
+	{
+		gfxFramebuffer[i * 3U] = color.r;
+		gfxFramebuffer[i * 3U + 1U] = color.g;
+		gfxFramebuffer[i * 3U + 2U] = color.b;
+	}
+}
+
+void GFX_fillRect(int16_t x, int16_t y, int16_t w, int16_t h, struct Color color)
+{
+	if (w <= 0 || h <= 0)
+	{
+		return;
+	}
+
+	if (hasFrameBuffer())
+	{
+		GFX_fillRectFallback(x, y, w, h, color);
+		return;
+	}
+
+	if (x < 0)
+	{
+		w += x;
+		x = 0;
+	}
+	if (y < 0)
+	{
+		h += y;
+		y = 0;
+	}
+	if (x >= (int16_t)_width || y >= (int16_t)_height)
+	{
+		return;
+	}
+	if (x + w > (int16_t)_width)
+	{
+		w = (int16_t)_width - x;
+	}
+	if (y + h > (int16_t)_height)
+	{
+		h = (int16_t)_height - y;
+	}
+	if (w <= 0 || h <= 0)
+	{
+		return;
+	}
+
+	const uint32_t maxPixelsPerChunk = (uint32_t)BUFFER_MAX_SIZE / 3U;
+	if (maxPixelsPerChunk == 0U)
+	{
+		GFX_fillRectFallback(x, y, w, h, color);
+		return;
+	}
+
+	const uint16_t maxChunkWidth = (uint16_t)((w < (int16_t)maxPixelsPerChunk) ? w : (int16_t)maxPixelsPerChunk);
+	for (uint16_t xOffset = 0; xOffset < (uint16_t)w; xOffset += maxChunkWidth)
+	{
+		const uint16_t chunkW = (uint16_t)(((uint16_t)w - xOffset < maxChunkWidth) ? ((uint16_t)w - xOffset) : maxChunkWidth);
+		const uint16_t maxChunkHeight = (uint16_t)(maxPixelsPerChunk / chunkW);
+		const uint16_t chunkStepH = (maxChunkHeight == 0U) ? 1U : maxChunkHeight;
+
+		for (uint16_t yOffset = 0; yOffset < (uint16_t)h; yOffset += chunkStepH)
+		{
+			const uint16_t chunkH = (uint16_t)(((uint16_t)h - yOffset < chunkStepH) ? ((uint16_t)h - yOffset) : chunkStepH);
+
+			GFX_createFramebuf((uint16_t)x + xOffset, (uint16_t)y + yOffset, chunkW, chunkH);
+			if (!hasFrameBuffer())
+			{
+				GFX_fillRectFallback((int16_t)((uint16_t)x + xOffset), (int16_t)((uint16_t)y + yOffset), (int16_t)chunkW, (int16_t)chunkH, color);
+				continue;
+			}
+
+			GFX_fillActiveFramebuffer(color);
+			GFX_flush();
+			GFX_destroyFramebuf();
+		}
 	}
 }
 
@@ -279,6 +362,106 @@ void GFX_drawRect(int16_t x, int16_t y, int16_t w, int16_t h, struct Color color
 	GFX_drawFastHLine(x, y + h - 1, w, color);
 	GFX_drawFastVLine(x, y, h, color);
 	GFX_drawFastVLine(x + w - 1, y, h, color);
+}
+
+void GFX_drawTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, struct Color color)
+{
+	GFX_drawLine(x0, y0, x1, y1, color);
+	GFX_drawLine(x1, y1, x2, y2, color);
+	GFX_drawLine(x2, y2, x0, y0, color);
+}
+
+void GFX_fillTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, struct Color color)
+{
+	int16_t a;
+	int16_t b;
+	int16_t y;
+	int32_t sa = 0;
+	int32_t sb = 0;
+
+	if (y0 > y1)
+	{
+		swap(y0, y1);
+		swap(x0, x1);
+	}
+	if (y1 > y2)
+	{
+		swap(y2, y1);
+		swap(x2, x1);
+	}
+	if (y0 > y1)
+	{
+		swap(y0, y1);
+		swap(x0, x1);
+	}
+
+	if (y0 == y2)
+	{
+		a = b = x0;
+		if (x1 < a)
+		{
+			a = x1;
+		}
+		else if (x1 > b)
+		{
+			b = x1;
+		}
+		if (x2 < a)
+		{
+			a = x2;
+		}
+		else if (x2 > b)
+		{
+			b = x2;
+		}
+		GFX_drawFastHLine(a, y0, b - a + 1, color);
+		return;
+	}
+
+	int16_t dx01 = x1 - x0;
+	int16_t dy01 = y1 - y0;
+	int16_t dx02 = x2 - x0;
+	int16_t dy02 = y2 - y0;
+	int16_t dx12 = x2 - x1;
+	int16_t dy12 = y2 - y1;
+
+	int16_t last;
+	if (y1 == y2)
+	{
+		last = y1;
+	}
+	else
+	{
+		last = y1 - 1;
+	}
+
+	for (y = y0; y <= last; y++)
+	{
+		a = x0 + sa / dy01;
+		b = x0 + sb / dy02;
+		sa += dx01;
+		sb += dx02;
+		if (a > b)
+		{
+			swap(a, b);
+		}
+		GFX_drawFastHLine(a, y, b - a + 1, color);
+	}
+
+	sa = (int32_t)dx12 * (int32_t)(y - y1);
+	sb = (int32_t)dx02 * (int32_t)(y - y0);
+	for (; y <= y2; y++)
+	{
+		a = x1 + sa / dy12;
+		b = x0 + sb / dy02;
+		sa += dx12;
+		sb += dx02;
+		if (a > b)
+		{
+			swap(a, b);
+		}
+		GFX_drawFastHLine(a, y, b - a + 1, color);
+	}
 }
 
 unsigned char solveDiacritic(wchar_t wc, DIACRITIC* d) {
@@ -716,6 +899,11 @@ void GFX_createFramebuf(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 	frameBufferWidth = w;
 	frameBufferHeight = h;
 	gfxFramebuffer = malloc(w * h * sizeof(uint8_t) * 3);
+}
+
+bool hasFrameBuffer()
+{
+	return gfxFramebuffer != NULL;
 }
 void GFX_destroyFramebuf()
 {

@@ -15,6 +15,7 @@ extern "C" {
 void GFX_createFramebuf(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
 void GFX_destroyFramebuf();
 void GFX_flush();
+bool hasFrameBuffer();
 
 void GFX_drawPixel(int16_t x, int16_t y, struct Color color);
 
@@ -42,6 +43,8 @@ void GFX_clearScreen();
 
 void GFX_drawCircle(int16_t x0, int16_t y0, int16_t r, struct Color color);
 void GFX_fillCircle(int16_t x0, int16_t y0, int16_t r, struct Color color);
+void GFX_drawTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, struct Color color);
+void GFX_fillTriangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, struct Color color);
 
 void GFX_printf(uint8_t textsize, const char *format, ...);
 
