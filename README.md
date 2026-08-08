@@ -1,9 +1,14 @@
+Fork of tvlad1234/pico-displayDrivs stripped of other parts than ili9341. Later reworked for displays with ILI9488 SPI (480x320). Some minor chages are in Framebuffer (480x320 is too big for pico memory so now you can use framebuffer for chunks of the screen) and some stuff in gfx (triangle, non solid rectangle, rectangle with rounded borders).
+
+
+
+
 # pico-displayDrivs
 *Display driver library for RP2040 pico-sdk* \
 Example code [here](https://github.com/tvlad1234/pico-st7735Example)
 ## Supported display controllers:
 ST7735 and ST7739 in SPI mode \
-ILI9488 in SPI mode
+ILI9341 in SPI mode
 
 ## Library usage
 Add the *pico-displayDrivs* subdirectory to the CMakeLists.txt of your project and include the needed libraries.
